@@ -1,0 +1,46 @@
+import { type AudioPlayer, createAudioPlayer, setAudioModeAsync } from 'expo-audio'
+
+import { useSettings } from '@/core/settings/settingsStore'
+
+const SOURCES = {
+  tick: require('../../../assets/sfx/tick.wav'),
+  go: require('../../../assets/sfx/go.wav'),
+  match: require('../../../assets/sfx/match.wav'),
+  success: require('../../../assets/sfx/success.wav'),
+  fail: require('../../../assets/sfx/fail.wav'),
+  levelComplete: require('../../../assets/sfx/level-complete.wav'),
+} as const
+
+export type SoundName = keyof typeof SOURCES
+
+const players: Partial<Record<SoundName, AudioPlayer>> = {}
+let audioModeSet = false
+
+function getPlayer(name: SoundName): AudioPlayer {
+  let player = players[name]
+  if (!player) {
+    player = createAudioPlayer(SOURCES[name])
+    players[name] = player
+  }
+  return player
+}
+
+export function playSound(name: SoundName) {
+  if (!useSettings.getState().soundEnabled) return
+  try {
+    if (!audioModeSet) {
+      audioModeSet = true
+      setAudioModeAsync({ playsInSilentMode: true }).catch(() => {})
+    }
+    const player = getPlayer(name)
+    player.seekTo(0)
+    player.play()
+  } catch (e) {
+    console.warn(`[sfx] Failed to play ${name}`, e)
+  }
+}
+
+/** Creates all players up front so the first sound doesn't lag. */
+export function preloadSounds() {
+  for (const name of Object.keys(SOURCES) as SoundName[]) getPlayer(name)
+}
