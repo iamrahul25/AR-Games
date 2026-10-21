@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native'
 
 import { theme } from '@/core/ui/theme'
 import { useLatest } from '@/core/utils/useLatest'
+import { fitTransform } from './fitTransform'
 import { BONES, JOINTS } from './landmarks'
 import { POSE_EMIT_INTERVAL_MS, type PoseCameraProps } from './PoseCamera.types'
 import type { Landmark, PoseFrame } from './types'
@@ -56,13 +57,15 @@ export function PoseCamera({
   partColors,
   onPose,
   onStatus,
+  resizeMode = 'cover',
+  emitIntervalMs = POSE_EMIT_INTERVAL_MS,
   style,
 }: PoseCameraProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const onPoseRef = useLatest(onPose)
   const onStatusRef = useLatest(onStatus)
-  const drawOptionsRef = useLatest({ showSkeleton, partColors })
+  const drawOptionsRef = useLatest({ showSkeleton, partColors, resizeMode, emitIntervalMs })
 
   const mirrored = facing === 'front'
 
@@ -119,7 +122,7 @@ export function PoseCamera({
                 }))
               : null
             draw(landmarks, v.videoWidth, v.videoHeight)
-            if (now - lastEmit >= POSE_EMIT_INTERVAL_MS) {
+            if (now - lastEmit >= drawOptionsRef.current.emitIntervalMs) {
               lastEmit = now
               if (landmarks) {
                 const frame: PoseFrame = {
@@ -158,12 +161,10 @@ export function PoseCamera({
       if (!ctx) return
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, rect.width, rect.height)
-      const { showSkeleton: show, partColors: colors } = drawOptionsRef.current
+      const { showSkeleton: show, partColors: colors, resizeMode: fit } = drawOptionsRef.current
       if (!landmarks || !show) return
 
-      const scale = Math.max(rect.width / iw, rect.height / ih)
-      const dx = (rect.width - iw * scale) / 2
-      const dy = (rect.height - ih * scale) / 2
+      const { scale, dx, dy } = fitTransform({ width: iw, height: ih }, rect, fit)
       const px = (lm: Landmark) => lm.x * iw * scale + dx
       const py = (lm: Landmark) => lm.y * ih * scale + dy
 
@@ -211,7 +212,7 @@ export function PoseCamera({
           inset: 0,
           width: '100%',
           height: '100%',
-          objectFit: 'cover',
+          objectFit: resizeMode,
           transform: mirrored ? 'scaleX(-1)' : undefined,
         }}
       />

@@ -9,6 +9,15 @@ const SOURCES = {
   success: require('../../../assets/sfx/success.wav'),
   fail: require('../../../assets/sfx/fail.wav'),
   levelComplete: require('../../../assets/sfx/level-complete.wav'),
+  jump: require('../../../assets/sfx/jump.wav'),
+  slide: require('../../../assets/sfx/slide.wav'),
+  lane: require('../../../assets/sfx/lane.wav'),
+  coin: require('../../../assets/sfx/coin.wav'),
+  closeCall: require('../../../assets/sfx/close-call.wav'),
+  hit: require('../../../assets/sfx/hit.wav'),
+  speedUp: require('../../../assets/sfx/speed-up.wav'),
+  milestone: require('../../../assets/sfx/milestone.wav'),
+  gameOver: require('../../../assets/sfx/game-over.wav'),
 } as const
 
 export type SoundName = keyof typeof SOURCES

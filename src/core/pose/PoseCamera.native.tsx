@@ -13,6 +13,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { theme } from '@/core/ui/theme'
 import { useLatest } from '@/core/utils/useLatest'
+import { fitTransform, type FitMode } from './fitTransform'
 import { BONES, JOINTS, LANDMARK_COUNT, MIRROR_INDEX } from './landmarks'
 import { toCanonical } from './mirror'
 import { POSE_EMIT_INTERVAL_MS, type PartColors, type PoseCameraProps } from './PoseCamera.types'
@@ -32,6 +33,8 @@ export function PoseCamera({
   partColors,
   onPose,
   onStatus,
+  resizeMode = 'cover',
+  emitIntervalMs = POSE_EMIT_INTERVAL_MS,
   style,
 }: PoseCameraProps) {
   const permission = useCameraPermission()
@@ -110,7 +113,7 @@ export function PoseCamera({
           points.value = []
         }
         const now = Date.now()
-        if (now - lastEmit.value >= POSE_EMIT_INTERVAL_MS) {
+        if (now - lastEmit.value >= emitIntervalMs) {
           lastEmit.value = now
           scheduleOnRN(
             emitPose,
@@ -148,7 +151,7 @@ export function PoseCamera({
         isActive={isActive}
         outputs={[frameOutput]}
         mirrorMode="auto"
-        resizeMode="cover"
+        resizeMode={resizeMode}
         onError={(e) => onStatusRef.current?.('error', e.message)}
       />
       {showSkeleton && (
@@ -161,6 +164,7 @@ export function PoseCamera({
               points={points}
               imageSize={imageSize}
               viewSize={viewSize}
+              fit={resizeMode}
             />
           ))}
         </Canvas>
@@ -175,14 +179,15 @@ interface PartSkeletonProps {
   points: SharedValue<number[]>
   imageSize: SharedValue<{ width: number; height: number }>
   viewSize: SharedValue<{ width: number; height: number }>
+  fit: FitMode
 }
 
-function PartSkeleton({ partIndex, color, points, imageSize, viewSize }: PartSkeletonProps) {
+function PartSkeleton({ partIndex, color, points, imageSize, viewSize, fit }: PartSkeletonProps) {
   const bones = useDerivedValue<SkPath>(() => {
     const path = Skia.PathBuilder.Make()
     const p = points.value
     if (p.length === 0) return path.detach()
-    const { scale, dx, dy, iw, ih } = coverTransform(imageSize.value, viewSize.value)
+    const { scale, dx, dy, iw, ih } = fitTransform(imageSize.value, viewSize.value, fit)
     for (const [from, to, part] of BONE_LIST) {
       if (part !== partIndex) continue
       if (p[from * 3 + 2] < VISIBILITY || p[to * 3 + 2] < VISIBILITY) continue
@@ -196,7 +201,7 @@ function PartSkeleton({ partIndex, color, points, imageSize, viewSize }: PartSke
     const path = Skia.PathBuilder.Make()
     const p = points.value
     if (p.length === 0) return path.detach()
-    const { scale, dx, dy, iw, ih } = coverTransform(imageSize.value, viewSize.value)
+    const { scale, dx, dy, iw, ih } = fitTransform(imageSize.value, viewSize.value, fit)
     for (const [index, part] of JOINT_LIST) {
       if (part !== partIndex || p[index * 3 + 2] < VISIBILITY) continue
       path.addCircle(p[index * 3] * iw * scale + dx, p[index * 3 + 1] * ih * scale + dy, 7)
@@ -211,17 +216,6 @@ function PartSkeleton({ partIndex, color, points, imageSize, viewSize }: PartSke
       <Path path={joints} color="white" style="stroke" strokeWidth={2.5} />
     </>
   )
-}
-
-function coverTransform(
-  image: { width: number; height: number },
-  view: { width: number; height: number },
-) {
-  'worklet'
-  const iw = image.width || 1
-  const ih = image.height || 1
-  const scale = Math.max(view.width / iw, view.height / ih)
-  return { scale, iw, ih, dx: (view.width - iw * scale) / 2, dy: (view.height - ih * scale) / 2 }
 }
 
 const styles = StyleSheet.create({

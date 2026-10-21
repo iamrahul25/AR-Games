@@ -44,6 +44,9 @@ export default function GameHub() {
             <Pressable onPress={() => router.push('/dev/pose-recorder')} style={styles.devLink}>
               <Text style={styles.devLinkText}>Pose recorder</Text>
             </Pressable>
+            <Pressable onPress={() => router.push('/dev/runner-motion' as never)} style={styles.devLink}>
+              <Text style={styles.devLinkText}>Runner motion</Text>
+            </Pressable>
           </View>
         </GlassCard>
       )}
@@ -140,7 +143,7 @@ const styles = StyleSheet.create({
   badgeText: { color: theme.colors.primary, fontSize: 12, fontWeight: '800' },
   devCard: { gap: theme.spacing.sm },
   devTitle: { color: theme.colors.textDim, fontSize: theme.font.small, fontWeight: '800', textTransform: 'uppercase' },
-  devRow: { flexDirection: 'row', gap: theme.spacing.md },
+  devRow: { flexDirection: 'row', gap: theme.spacing.md, flexWrap: 'wrap' },
   devLink: { paddingVertical: theme.spacing.sm, paddingHorizontal: theme.spacing.md, borderRadius: theme.radius.sm, backgroundColor: theme.colors.track },
   devLinkText: { color: theme.colors.text, fontWeight: '700' },
 })

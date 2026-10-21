@@ -8,8 +8,8 @@ import { PoseSimulator } from './simulator'
 import { StickFigure } from './StickFigure'
 import type { PoseFrame } from './types'
 
-const IMAGE_W = 480
-const IMAGE_H = 640
+export const SIMULATED_IMAGE_W = 480
+export const SIMULATED_IMAGE_H = 640
 
 /**
  * Demo mode: a simulated player that copies the target pose. Lets the game run
@@ -18,16 +18,25 @@ const IMAGE_H = 640
 export function SimulatedPoseCamera({
   isActive,
   target,
+  driver,
   showSkeleton = true,
   partColors,
   onPose,
   onStatus,
+  resizeMode = 'cover',
+  emitIntervalMs = POSE_EMIT_INTERVAL_MS,
   style,
 }: SimulatedPoseCameraProps) {
-  const [simulator] = useState(() => new PoseSimulator(IMAGE_W, IMAGE_H))
+  // A driven player (game bot) reacts instantly; the pose-copying player is deliberately human-paced.
+  const [simulator] = useState(() =>
+    driver
+      ? new PoseSimulator(SIMULATED_IMAGE_W, SIMULATED_IMAGE_H, { reactionSeconds: 0, speedDegPerSec: 900, sloppinessDeg: 2 })
+      : new PoseSimulator(SIMULATED_IMAGE_W, SIMULATED_IMAGE_H),
+  )
   const [frame, setFrame] = useState<PoseFrame | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const onPoseRef = useLatest(onPose)
+  const driverRef = useLatest(driver)
 
   useEffect(() => {
     simulator.setTarget(target, Date.now())
@@ -40,12 +49,14 @@ export function SimulatedPoseCamera({
   useEffect(() => {
     if (!isActive) return
     const id = setInterval(() => {
-      const next = simulator.step(Date.now())
+      const now = Date.now()
+      if (driverRef.current) simulator.setTarget(driverRef.current(now), now)
+      const next = simulator.step(now)
       setFrame(next)
       onPoseRef.current(next)
-    }, POSE_EMIT_INTERVAL_MS)
+    }, emitIntervalMs)
     return () => clearInterval(id)
-  }, [isActive, simulator, onPoseRef])
+  }, [isActive, simulator, onPoseRef, driverRef, emitIntervalMs])
 
   const onLayout = (e: LayoutChangeEvent) =>
     setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
@@ -56,13 +67,13 @@ export function SimulatedPoseCamera({
       {showSkeleton && (
         <StickFigure
           landmarks={frame?.landmarks ?? null}
-          imageAspect={IMAGE_W / IMAGE_H}
+          imageAspect={SIMULATED_IMAGE_W / SIMULATED_IMAGE_H}
           width={size.width}
           height={size.height}
           partColors={partColors}
           lineWidth={8}
           jointRadius={7}
-          fit="cover"
+          fit={resizeMode}
           style={StyleSheet.absoluteFill}
         />
       )}

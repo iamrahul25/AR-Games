@@ -5,34 +5,10 @@ import { useSettings, type ModelQualitySetting } from '@/core/settings/settingsS
 import { GlassCard } from '@/core/ui/GlassCard'
 import { Screen } from '@/core/ui/Screen'
 import { ScreenHeader } from '@/core/ui/ScreenHeader'
+import { SegmentedToggle } from '@/core/ui/SegmentedToggle'
 import { theme } from '@/core/ui/theme'
+import { useRunnerStore, type CameraPanelSize, type GuidesMode } from '@/games/endless-runner/store/runnerStore'
 import { useMatchPoseProgress } from '@/games/match-pose/store/progressStore'
-
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T
-  options: { value: T; label: string }[]
-  onChange: (v: T) => void
-}) {
-  return (
-    <View style={styles.segmented}>
-      {options.map((o) => (
-        <Pressable
-          key={o.value}
-          accessibilityRole="button"
-          accessibilityState={{ selected: o.value === value }}
-          onPress={() => onChange(o.value)}
-          style={[styles.segment, o.value === value && styles.segmentActive]}
-        >
-          <Text style={[styles.segmentText, o.value === value && styles.segmentTextActive]}>{o.label}</Text>
-        </Pressable>
-      ))}
-    </View>
-  )
-}
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -63,6 +39,19 @@ function ToggleRow({ label, hint, value, onChange }: { label: string; hint?: str
 export default function SettingsScreen() {
   const s = useSettings()
   const resetProgress = useMatchPoseProgress((p) => p.resetProgress)
+  const runner = useRunnerStore()
+
+  const confirmRunnerReset = () => {
+    const doReset = () => runner.resetProgress()
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm?.('Reset all Free Run bests and totals?')) doReset()
+      return
+    }
+    Alert.alert('Reset Free Run?', 'This clears your best runs and totals.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Reset', style: 'destructive', onPress: doReset },
+    ])
+  }
 
   const confirmReset = () => {
     const doReset = () => resetProgress()
@@ -83,7 +72,7 @@ export default function SettingsScreen() {
       <Text style={styles.section}>Camera</Text>
       <GlassCard style={styles.card}>
         <Row label="Camera" hint="Front camera lets you see yourself">
-          <Segmented
+          <SegmentedToggle
             value={s.cameraFacing}
             options={[
               { value: 'front', label: 'Front' },
@@ -94,7 +83,7 @@ export default function SettingsScreen() {
         </Row>
         <View style={styles.column}>
           <Text style={styles.rowLabel}>Tracking quality</Text>
-          <Segmented<ModelQualitySetting>
+          <SegmentedToggle<ModelQualitySetting>
             value={s.modelQuality}
             options={[
               { value: 'auto', label: 'Auto' },
@@ -145,6 +134,57 @@ export default function SettingsScreen() {
         </Pressable>
       </GlassCard>
 
+      <Text style={styles.section}>Free Run</Text>
+      <GlassCard style={styles.card}>
+        <View style={styles.column}>
+          <Text style={styles.rowLabel}>Show guides</Text>
+          <Text style={styles.rowHint}>Lanes and the jump / duck lines on the camera</Text>
+          <SegmentedToggle<GuidesMode>
+            value={runner.guidesMode}
+            options={[
+              { value: 'always', label: 'Always' },
+              { value: 'setup', label: 'During setup only' },
+              { value: 'off', label: 'Off' },
+            ]}
+            onChange={(v) => runner.set({ guidesMode: v })}
+          />
+        </View>
+        <View style={styles.column}>
+          <Text style={styles.rowLabel}>Camera panel size</Text>
+          <SegmentedToggle<CameraPanelSize>
+            value={runner.cameraPanelSize}
+            options={[
+              { value: 'small', label: 'Small' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'large', label: 'Large' },
+            ]}
+            onChange={(v) => runner.set({ cameraPanelSize: v })}
+          />
+        </View>
+        <ToggleRow
+          label="Setup tips before each run"
+          value={runner.showSetupTips}
+          onChange={(v) => runner.set({ showSetupTips: v })}
+        />
+        <ToggleRow
+          label="Always do the training run"
+          hint="Practise each move before every run"
+          value={runner.alwaysTrainingRun}
+          onChange={(v) => runner.set({ alwaysTrainingRun: v })}
+        />
+        {Platform.OS === 'web' && (
+          <ToggleRow
+            label="Keyboard controls"
+            hint="Arrow keys or WASD to change lanes and duck, Space to jump"
+            value={runner.keyboardControls}
+            onChange={(v) => runner.set({ keyboardControls: v })}
+          />
+        )}
+        <Pressable accessibilityRole="button" onPress={confirmRunnerReset} style={styles.resetButton}>
+          <Text style={styles.resetText}>Reset Free Run progress</Text>
+        </Pressable>
+      </GlassCard>
+
       <Text style={styles.footer}>
         Pose tracking runs on your device. Camera video is never recorded or uploaded.
       </Text>
@@ -167,18 +207,6 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowLabel: { color: theme.colors.text, fontSize: theme.font.body, fontWeight: '700' },
   rowHint: { color: theme.colors.textMuted, fontSize: theme.font.small, marginTop: 2 },
-  segmented: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.track,
-    borderRadius: theme.radius.pill,
-    padding: 3,
-    alignSelf: 'flex-start',
-    flexWrap: 'wrap',
-  },
-  segment: { paddingHorizontal: theme.spacing.md, paddingVertical: 6, borderRadius: theme.radius.pill },
-  segmentActive: { backgroundColor: theme.colors.primaryDark },
-  segmentText: { color: theme.colors.textMuted, fontWeight: '700', fontSize: theme.font.small },
-  segmentTextActive: { color: theme.colors.text },
   resetButton: { alignSelf: 'flex-start', paddingVertical: theme.spacing.sm },
   resetText: { color: theme.colors.danger, fontWeight: '800' },
   footer: { color: theme.colors.textDim, fontSize: theme.font.small, textAlign: 'center' },

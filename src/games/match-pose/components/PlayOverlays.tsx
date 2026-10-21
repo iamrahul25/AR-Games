@@ -1,7 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import type { FramingResult } from '@/core/pose/framing'
-import { Button } from '@/core/ui/Button'
 import { GlassCard } from '@/core/ui/GlassCard'
 import { theme } from '@/core/ui/theme'
 import { RATING_LABELS } from '../engine/scoring'
@@ -18,14 +17,6 @@ export function GetReadyOverlay({ framing }: { framing: FramingResult }) {
         </Text>
         <Text style={styles.readyTip}>Phone at waist height · step back 2–3 m · whole body in view</Text>
       </GlassCard>
-    </View>
-  )
-}
-
-export function CountdownOverlay({ value }: { value: number }) {
-  return (
-    <View style={styles.center} pointerEvents="none">
-      <Text style={styles.countdown}>{value}</Text>
     </View>
   )
 }
@@ -52,19 +43,6 @@ export function RatingToast({ outcome }: { outcome: PoseOutcome }) {
   )
 }
 
-export function PauseMenu({ onResume, onRestart, onQuit }: { onResume: () => void; onRestart: () => void; onQuit: () => void }) {
-  return (
-    <View style={[StyleSheet.absoluteFill, styles.pauseBackdrop]}>
-      <GlassCard glow style={styles.pauseCard}>
-        <Text style={styles.pauseTitle}>Paused</Text>
-        <Button label="Resume" onPress={onResume} />
-        <Button label="Restart level" variant="secondary" onPress={onRestart} />
-        <Button label="Quit" variant="ghost" onPress={onQuit} />
-      </GlassCard>
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   center: {
     ...StyleSheet.absoluteFill,
@@ -87,13 +65,6 @@ const styles = StyleSheet.create({
   readyTitle: { color: theme.colors.text, fontSize: theme.font.heading, fontWeight: '900' },
   readyMessage: { fontSize: theme.font.body, fontWeight: '800', textAlign: 'center' },
   readyTip: { color: theme.colors.textMuted, fontSize: theme.font.small, textAlign: 'center' },
-  countdown: {
-    color: theme.colors.text,
-    fontSize: 140,
-    fontWeight: '900',
-    textShadowColor: theme.colors.glow,
-    textShadowRadius: 24,
-  },
   toast: {
     alignItems: 'center',
     paddingHorizontal: theme.spacing.xxl,
@@ -104,12 +75,4 @@ const styles = StyleSheet.create({
   },
   toastTitle: { fontSize: theme.font.huge, fontWeight: '900' },
   toastSub: { color: theme.colors.text, fontSize: theme.font.body, fontWeight: '700' },
-  pauseBackdrop: {
-    backgroundColor: theme.colors.overlay,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing.xl,
-  },
-  pauseCard: { width: '100%', maxWidth: 360, gap: theme.spacing.md },
-  pauseTitle: { color: theme.colors.text, fontSize: theme.font.title, fontWeight: '900', textAlign: 'center' },
 })

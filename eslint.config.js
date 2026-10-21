@@ -29,6 +29,12 @@ module.exports = defineConfig([
     },
   },
   {
+    files: ['src/games/endless-runner/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [{ group: ['@/games/*', '!@/games/endless-runner', '!@/games/types'], message: 'games must not import from other games' }] }],
+    },
+  },
+  {
     files: ['scripts/**/*.js', '*.config.js'],
     languageOptions: {
       globals: { __dirname: 'readonly', Buffer: 'readonly', process: 'readonly', require: 'readonly', module: 'writable' },

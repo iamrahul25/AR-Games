@@ -145,31 +145,87 @@ export interface FitOptions {
   /** Normalized center of the body in the image. */
   centerX?: number
   centerY?: number
+  /**
+   * Fixed size in image pixels per body unit (torso length), instead of fitting the
+   * bounding box. With `scale`, `centerX` is the hip midpoint's x.
+   */
+  scale?: number
+  /** With `scale`: normalized y of the lowest ankle (feet stay on this line). */
+  groundY?: number
+}
+
+function bounds(pts: Vec[]) {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
+  return { minX, maxX, minY: minY - 0.12, maxY }
+}
+
+/**
+ * Where {@linkcode skeletonToFrame} puts a skeleton when fitting it: the scale (image px per
+ * body unit) and the normalized y of the feet. Used to keep a moving body at a fixed size.
+ */
+export function skeletonFit(
+  spec: SkeletonSpec,
+  view: PoseView,
+  { imageWidth, imageHeight, fill = 0.78, centerY = 0.52 }: FitOptions,
+): { scale: number; groundY: number } {
+  const pts = buildBodyPoints(spec, view)
+  const b = bounds(pts)
+  const scale = Math.min(
+    (imageWidth * fill) / Math.max(b.maxX - b.minX, 1e-3),
+    (imageHeight * fill) / Math.max(b.maxY - b.minY, 1e-3),
+  )
+  const ankle = Math.max(pts[LM.leftAnkle].y, pts[LM.rightAnkle].y)
+  return { scale, groundY: ((ankle - (b.minY + b.maxY) / 2) * scale) / imageHeight + centerY }
 }
 
 /** Builds a {@linkcode PoseFrame} (normalized landmarks) that fits the skeleton into an image. */
 export function skeletonToFrame(
   spec: SkeletonSpec,
   view: PoseView,
-  { imageWidth, imageHeight, fill = 0.78, centerX = 0.5, centerY = 0.52 }: FitOptions,
+  { imageWidth, imageHeight, fill = 0.78, centerX = 0.5, centerY = 0.52, scale: fixedScale, groundY }: FitOptions,
   timestamp = 0,
 ): PoseFrame {
   const pts = buildBodyPoints(spec, view)
-  const xs = pts.map((p) => p.x)
-  const ys = pts.map((p) => p.y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys) - 0.12
-  const maxY = Math.max(...ys)
-  const bodyW = Math.max(maxX - minX, 1e-3)
-  const bodyH = Math.max(maxY - minY, 1e-3)
-  const scale = Math.min((imageWidth * fill) / bodyW, (imageHeight * fill) / bodyH)
-  const cx = (minX + maxX) / 2
-  const cy = (minY + maxY) / 2
+  let scale: number
+  let ox: number
+  let oy: number
+  let anchorX: number
+  let anchorY: number
+  if (fixedScale !== undefined) {
+    scale = fixedScale
+    ox = 0
+    anchorX = centerX
+    if (groundY !== undefined) {
+      oy = Math.max(pts[LM.leftAnkle].y, pts[LM.rightAnkle].y)
+      anchorY = groundY
+    } else {
+      oy = 0
+      anchorY = centerY
+    }
+  } else {
+    const b = bounds(pts)
+    scale = Math.min(
+      (imageWidth * fill) / Math.max(b.maxX - b.minX, 1e-3),
+      (imageHeight * fill) / Math.max(b.maxY - b.minY, 1e-3),
+    )
+    ox = (b.minX + b.maxX) / 2
+    oy = (b.minY + b.maxY) / 2
+    anchorX = centerX
+    anchorY = centerY
+  }
 
   const landmarks: Landmark[] = pts.map((p) => ({
-    x: ((p.x - cx) * scale) / imageWidth + centerX,
-    y: ((p.y - cy) * scale) / imageHeight + centerY,
+    x: ((p.x - ox) * scale) / imageWidth + anchorX,
+    y: ((p.y - oy) * scale) / imageHeight + anchorY,
     z: 0,
     visibility: 0.99,
   }))

@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { theme } from '@/core/ui/theme'
+import { fitTransform } from './fitTransform'
 import { BONES, JOINTS, LM } from './landmarks'
 import type { PartColors } from './PoseCamera.types'
 import type { Landmark } from './types'
@@ -45,11 +46,7 @@ export const StickFigure = memo(function StickFigure({
     return <View style={[{ width, height }, style]} pointerEvents="none" />
   }
 
-  const iw = imageAspect
-  const ih = 1
-  const scale = fit === 'cover' ? Math.max(width / iw, height / ih) : Math.min(width / iw, height / ih)
-  const dx = (width - iw * scale) / 2
-  const dy = (height - ih * scale) / 2
+  const { scale, dx, dy, iw, ih } = fitTransform({ width: imageAspect, height: 1 }, { width, height }, fit)
   const px = (lm: Landmark) => lm.x * iw * scale + dx
   const py = (lm: Landmark) => lm.y * ih * scale + dy
 

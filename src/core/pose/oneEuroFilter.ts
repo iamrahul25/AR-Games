@@ -51,9 +51,29 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
 
+export interface SmoothingOptions {
+  minCutoff: number
+  beta: number
+}
+
+/**
+ * `stable`: low jitter for holding poses. `responsive`: less lag during fast moves
+ * (jumps, hops), at the cost of a little more jitter when still.
+ */
+export const SMOOTHING_PRESETS = {
+  stable: { minCutoff: 1.2, beta: 0.02 },
+  responsive: { minCutoff: 2.5, beta: 2.0 },
+} as const satisfies Record<string, SmoothingOptions>
+
+export type SmoothingPreset = keyof typeof SMOOTHING_PRESETS
+
 /** Smooths every landmark coordinate of a pose stream independently. */
 export class PoseSmoother {
-  private filters = Array.from({ length: LANDMARK_COUNT * 3 }, () => new OneEuroFilter())
+  private filters: OneEuroFilter[]
+
+  constructor({ minCutoff, beta }: SmoothingOptions = SMOOTHING_PRESETS.stable) {
+    this.filters = Array.from({ length: LANDMARK_COUNT * 3 }, () => new OneEuroFilter(minCutoff, beta))
+  }
 
   smooth(frame: PoseFrame): PoseFrame {
     const t = frame.timestamp

@@ -4,21 +4,32 @@ import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View
 import { useSettings } from '@/core/settings/settingsStore'
 import { theme } from '@/core/ui/theme'
 import { useLatest } from '@/core/utils/useLatest'
-import { PoseSmoother } from './oneEuroFilter'
+import type { FitMode } from './fitTransform'
+import { GuideOverlay, type GuideSpec } from './GuideOverlay'
+import { PoseSmoother, SMOOTHING_PRESETS, type SmoothingPreset } from './oneEuroFilter'
 import { PoseCamera } from './PoseCamera'
 import type { PartColors } from './PoseCamera.types'
 import { resolvePoseModel } from './resolveModel'
-import { SimulatedPoseCamera } from './SimulatedPoseCamera'
+import { SIMULATED_IMAGE_H, SIMULATED_IMAGE_W, SimulatedPoseCamera } from './SimulatedPoseCamera'
 import type { SimulatorTarget } from './simulator'
 import type { PoseCameraStatus, PoseFrame } from './types'
 
 interface PoseStageProps {
   isActive: boolean
-  /** Smoothed pose in canonical space, ~15 Hz. */
+  /** Smoothed pose in canonical space, every `emitIntervalMs` (~15 Hz by default). */
   onPose: (frame: PoseFrame | null) => void
   partColors?: PartColors
   /** Pose the demo-mode player should copy. */
   simulatorTarget?: SimulatorTarget | null
+  /** Demo-mode bot: called before every simulated frame, overrides `simulatorTarget`. */
+  simulatorDriver?: (now: number) => SimulatorTarget | null
+  /** Default `cover`. Use `contain` when the whole frame (head to feet) must stay visible. */
+  resizeMode?: FitMode
+  emitIntervalMs?: number
+  /** Fixed at mount. Default `stable`. */
+  smoothing?: SmoothingPreset
+  /** Lanes / lines / markers drawn above the skeleton. */
+  guides?: GuideSpec | null
   style?: StyleProp<ViewStyle>
 }
 
@@ -26,13 +37,25 @@ interface PoseStageProps {
  * The live "stage": camera (or demo-mode simulated player) + skeleton overlay +
  * jitter smoothing + status overlays (permission, model loading, errors).
  */
-export function PoseStage({ isActive, onPose, partColors, simulatorTarget = null, style }: PoseStageProps) {
+export function PoseStage({
+  isActive,
+  onPose,
+  partColors,
+  simulatorTarget = null,
+  simulatorDriver,
+  resizeMode = 'cover',
+  emitIntervalMs,
+  smoothing = 'stable',
+  guides,
+  style,
+}: PoseStageProps) {
   const { cameraFacing, modelQuality, showSkeleton, demoMode, set } = useSettings()
   const model = useMemo(() => resolvePoseModel(modelQuality), [modelQuality])
   const [status, setStatus] = useState<{ status: PoseCameraStatus; message?: string }>({
     status: 'loading-model',
   })
-  const [smoother] = useState(() => new PoseSmoother())
+  const [smoother] = useState(() => new PoseSmoother(SMOOTHING_PRESETS[smoothing]))
+  const [imageAspect, setImageAspect] = useState(3 / 4)
   const onPoseRef = useLatest(onPose)
 
   const handlePose = useCallback(
@@ -41,6 +64,10 @@ export function PoseStage({ isActive, onPose, partColors, simulatorTarget = null
         smoother.reset()
         onPoseRef.current(null)
         return
+      }
+      if (frame.imageHeight > 0) {
+        const aspect = Math.round((frame.imageWidth / frame.imageHeight) * 1000) / 1000
+        setImageAspect((prev) => (prev === aspect ? prev : aspect))
       }
       onPoseRef.current(smoother.smooth(frame))
     },
@@ -57,10 +84,13 @@ export function PoseStage({ isActive, onPose, partColors, simulatorTarget = null
         <SimulatedPoseCamera
           isActive={isActive}
           target={simulatorTarget}
+          driver={simulatorDriver}
           showSkeleton={showSkeleton}
           partColors={partColors}
           onPose={handlePose}
           onStatus={handleStatus}
+          resizeMode={resizeMode}
+          emitIntervalMs={emitIntervalMs}
         />
       ) : (
         <PoseCamera
@@ -71,6 +101,16 @@ export function PoseStage({ isActive, onPose, partColors, simulatorTarget = null
           partColors={partColors}
           onPose={handlePose}
           onStatus={handleStatus}
+          resizeMode={resizeMode}
+          emitIntervalMs={emitIntervalMs}
+        />
+      )}
+      {guides && (
+        <GuideOverlay
+          spec={guides}
+          imageAspect={demoMode ? SIMULATED_IMAGE_W / SIMULATED_IMAGE_H : imageAspect}
+          fit={resizeMode}
+          mirrorX={!demoMode && cameraFacing === 'back'}
         />
       )}
       {!demoMode && status.status !== 'running' && (

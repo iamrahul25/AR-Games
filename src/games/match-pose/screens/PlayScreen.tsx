@@ -11,13 +11,15 @@ import { PoseStage } from '@/core/pose/PoseStage'
 import type { SimulatorTarget } from '@/core/pose/simulator'
 import type { PoseFrame } from '@/core/pose/types'
 import { BODY_PARTS } from '@/core/pose/types'
+import { CountdownOverlay } from '@/core/ui/CountdownOverlay'
+import { PauseMenu, type PauseAction } from '@/core/ui/PauseMenu'
 import { PART_STATUS_COLORS, theme } from '@/core/ui/theme'
 import { useKeepScreenOn } from '@/core/utils/useKeepScreenOn'
 import { BodyPartChecklist } from '../components/BodyPartChecklist'
 import { FeedbackBanner } from '../components/FeedbackBanner'
 import { HoldMeter } from '../components/HoldMeter'
 import { HudBar } from '../components/HudBar'
-import { CountdownOverlay, GetReadyOverlay, PauseMenu, RatingToast } from '../components/PlayOverlays'
+import { GetReadyOverlay, RatingToast } from '../components/PlayOverlays'
 import { TargetPoseCard } from '../components/TargetPoseCard'
 import { levelPoses } from '../data/levels'
 import { LevelRunner, type RunnerEvent, type RunnerSnapshot } from '../engine/levelRunner'
@@ -157,6 +159,11 @@ export function PlayScreen({ level }: { level: LevelDefinition }) {
     if (router.canGoBack()) router.back()
     else router.replace('/games/match-pose' as never)
   }
+  const pauseActions: PauseAction[] = [
+    { label: 'Resume', onPress: resume, variant: 'primary' },
+    { label: 'Restart level', onPress: restart },
+    { label: 'Quit', onPress: quit, variant: 'ghost' },
+  ]
 
   const overlays = (
     <>
@@ -215,7 +222,7 @@ export function PlayScreen({ level }: { level: LevelDefinition }) {
             </View>
           </ScrollView>
         </SafeAreaView>
-        {paused && <PauseMenu onResume={resume} onRestart={restart} onQuit={quit} />}
+        {paused && <PauseMenu actions={pauseActions} />}
       </View>
     )
   }
@@ -249,7 +256,7 @@ export function PlayScreen({ level }: { level: LevelDefinition }) {
           {snap.phase === 'posing' && <BodyPartChecklist match={snap.match} compact />}
         </View>
       </SafeAreaView>
-      {paused && <PauseMenu onResume={resume} onRestart={restart} onQuit={quit} />}
+      {paused && <PauseMenu actions={pauseActions} />}
     </View>
   )
 }
