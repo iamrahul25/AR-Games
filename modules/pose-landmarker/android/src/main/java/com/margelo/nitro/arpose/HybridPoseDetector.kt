@@ -19,6 +19,8 @@ class HybridPoseDetector(
 ) : HybridPoseDetectorSpec() {
   private val lock = Any()
   private var landmarker: PoseLandmarker? = null
+  private var creationError: Throwable? = null
+  private var gpuFailed = false
   private var delegateInUse: PoseDelegate = options.delegate
   private var lastTimestampMs = 0L
   private var isDisposed = false
@@ -61,16 +63,24 @@ class HybridPoseDetector(
   // (and the GPU context is bound) on the Frame Output's thread, not on the JS thread.
   private fun requireLandmarker(): PoseLandmarker {
     landmarker?.let { return it }
+    // Loading the model is expensive; don't retry it on every frame once it has failed.
+    creationError?.let { throw it }
     val created =
-      if (options.delegate == PoseDelegate.GPU) {
-        try {
-          createLandmarker(Delegate.GPU).also { delegateInUse = PoseDelegate.GPU }
-        } catch (e: Throwable) {
-          Log.w(TAG, "GPU delegate unavailable, falling back to CPU.", e)
+      try {
+        if (options.delegate == PoseDelegate.GPU && !gpuFailed) {
+          try {
+            createLandmarker(Delegate.GPU).also { delegateInUse = PoseDelegate.GPU }
+          } catch (e: Throwable) {
+            Log.w(TAG, "GPU delegate unavailable, falling back to CPU.", e)
+            createLandmarker(Delegate.CPU).also { delegateInUse = PoseDelegate.CPU }
+          }
+        } else {
           createLandmarker(Delegate.CPU).also { delegateInUse = PoseDelegate.CPU }
         }
-      } else {
-        createLandmarker(Delegate.CPU).also { delegateInUse = PoseDelegate.CPU }
+      } catch (e: Throwable) {
+        Log.e(TAG, "Failed to create the pose landmarker.", e)
+        creationError = e
+        throw e
       }
     landmarker = created
     return created
@@ -102,7 +112,19 @@ class HybridPoseDetector(
         lastTimestampMs = timestampMs
 
         val start = SystemClock.elapsedRealtimeNanos()
-        val result = requireLandmarker().detectForVideo(mpImage, timestampMs)
+        val result =
+          try {
+            requireLandmarker().detectForVideo(mpImage, timestampMs)
+          } catch (e: Throwable) {
+            // Some GPU drivers (e.g. the Android emulator's) create the GPU graph fine
+            // but fail on the first inference with unsupported GL calls.
+            if (delegateInUse != PoseDelegate.GPU) throw e
+            Log.w(TAG, "GPU inference failed, falling back to CPU.", e)
+            gpuFailed = true
+            runCatching { landmarker?.close() }
+            landmarker = null
+            requireLandmarker().detectForVideo(mpImage, timestampMs)
+          }
         val inferenceMs = (SystemClock.elapsedRealtimeNanos() - start) / 1_000_000.0
 
         val pose = result.landmarks().firstOrNull() ?: return null
@@ -141,7 +163,10 @@ class HybridPoseDetector(
   override fun dispose() {
     synchronized(lock) {
       isDisposed = true
-      landmarker?.close()
+      // close() rethrows any error the graph hit earlier (e.g. a failed GPU inference).
+      // dispose() is called from C++ via JNI, where an uncaught Java exception aborts the app.
+      runCatching { landmarker?.close() }
+        .onFailure { Log.w(TAG, "Error while closing the pose landmarker.", it) }
       landmarker = null
     }
     super.dispose()

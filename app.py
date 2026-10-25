@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ANDROID_DIR = ROOT / "android"
 BUILT_APK = ANDROID_DIR / "app" / "build" / "outputs" / "apk" / "release" / "app-release.apk"
+DEBUG_APK = ANDROID_DIR / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"
 RELEASE_DIR = ROOT / "release"
 RELEASE_APK = RELEASE_DIR / "release-app.apk"
 POSE_MODULE_DIR = ROOT / "modules" / "pose-landmarker"
@@ -411,26 +412,52 @@ def boot_emulator(adb, emulator, timeout=300):
     raise RuntimeError("Timed out waiting for the emulator to boot.")
 
 
+def ensure_emulator(adb):
+    """Returns the serial of a running emulator, booting one first if needed."""
+    devices = running_emulators(adb)
+    if not devices:
+        boot_emulator(adb, sdk_tool("emulator", "emulator"))
+        devices = running_emulators(adb)
+    serial = devices[0]
+    print(f"\nUsing emulator: {serial}")
+    return serial
+
+
+def is_installed(adb, serial, package):
+    out = run([adb, "-s", serial, "shell", "pm", "list", "packages", package], capture=True).stdout
+    return f"package:{package}" in out.split()
+
+
+def launch_app(adb, serial, package):
+    run([adb, "-s", serial, "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
+        capture=True)
+    print(f"\nLaunched {package} on {serial}.")
+
+
 def run_in_emulator():
     if not RELEASE_APK.is_file():
         raise RuntimeError(f"{RELEASE_APK} not found. Build it first with option 2.")
 
     adb = sdk_tool("platform-tools", "adb")
-    emulator = sdk_tool("emulator", "emulator")
-
-    devices = running_emulators(adb)
-    if not devices:
-        boot_emulator(adb, emulator)
-        devices = running_emulators(adb)
-    serial = devices[0]
-    print(f"\nUsing emulator: {serial}")
-
+    serial = ensure_emulator(adb)
     run([adb, "-s", serial, "install", "-r", RELEASE_APK])
+    launch_app(adb, serial, android_package())
 
+
+# ---------------------------------------------------------------------------
+# 6. Launch the installed app in emulator
+# ---------------------------------------------------------------------------
+def launch_in_emulator():
+    """Opens the app already installed on the emulator, without rebuilding or reinstalling."""
+    adb = sdk_tool("platform-tools", "adb")
+    serial = ensure_emulator(adb)
     package = android_package()
-    run([adb, "-s", serial, "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
-        capture=True)
-    print(f"\nLaunched {package} on {serial}.")
+    if not is_installed(adb, serial, package):
+        if not RELEASE_APK.is_file():
+            raise RuntimeError(f"{package} is not installed and {RELEASE_APK} not found. Build it first with option 2.")
+        print(f"{package} is not installed yet, installing {RELEASE_APK.name}...")
+        run([adb, "-s", serial, "install", "-r", RELEASE_APK])
+    launch_app(adb, serial, package)
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +472,39 @@ def install_dev_build():
 
 
 # ---------------------------------------------------------------------------
+# 7. Run development build in emulator (no native build)
+# ---------------------------------------------------------------------------
+def is_debuggable(adb, serial, package):
+    """The release APK shares the package name but cannot connect to Metro; only debug builds can."""
+    out = run([adb, "-s", serial, "shell", "dumpsys", "package", package], capture=True).stdout
+    return "DEBUGGABLE" in out
+
+
+def run_dev_in_emulator():
+    """Starts Metro and opens the development build on the emulator, building it only if it isn't installed."""
+    adb = sdk_tool("platform-tools", "adb")
+    serial = ensure_emulator(adb)
+    package = android_package()
+
+    if is_installed(adb, serial, package) and is_debuggable(adb, serial, package):
+        cmd = ["npx", "expo", "start", "--android", "--dev-client"]
+    elif DEBUG_APK.is_file():
+        print(f"Development build not installed on {serial}, installing {DEBUG_APK.name} without rebuilding...")
+        cmd = ["npx", "expo", "run:android", "--binary", DEBUG_APK]
+    else:
+        print(
+            f"\nNo development build on {serial} yet, so the native code has to be compiled once."
+            "\nThe first build takes several minutes; after that this option opens the app without building."
+        )
+        cmd = ["npx", "expo", "run:android"]
+
+    try:
+        run(cmd, check=False)
+    except KeyboardInterrupt:
+        print("\nExpo dev server stopped.")
+
+
+# ---------------------------------------------------------------------------
 # Menu
 # ---------------------------------------------------------------------------
 OPTIONS = {
@@ -453,6 +513,8 @@ OPTIONS = {
     "3": ("Run the APK in emulator", run_in_emulator),
     "4": ("Install development build on phone/emulator (npx expo run:android --device)", install_dev_build),
     "5": ("Run preflight checks (before building the APK)", run_preflight),
+    "6": ("Launch the app in emulator (no rebuild or reinstall)", launch_in_emulator),
+    "7": ("Run development build live in emulator (builds only the first time)", run_dev_in_emulator),
 }
 
 

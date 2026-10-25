@@ -1,5 +1,5 @@
 import { Canvas, Path, Skia, type SkPath } from '@shopify/react-native-skia'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native'
 import { usePoseDetector } from 'react-native-ar-pose-landmarker'
 import { type SharedValue, useDerivedValue, useSharedValue } from 'react-native-reanimated'
@@ -52,16 +52,28 @@ export function PoseCamera({
   const onPoseRef = useLatest(onPose)
   const onStatusRef = useLatest(onStatus)
 
+  // useCameraPermission() returns a new object every render, so depend on its fields instead.
+  // Android drops a second permission request while the dialog is open, and the dropped
+  // request's native promise is never settled ("JPromise was destroyed").
+  const { hasPermission, canRequestPermission, requestPermission } = permission
+  const isRequestingPermission = useRef(false)
+
   useEffect(() => {
-    if (permission.hasPermission) {
+    if (hasPermission) {
       onStatusRef.current?.('loading-model')
-    } else if (permission.canRequestPermission) {
+    } else if (canRequestPermission) {
       onStatusRef.current?.('requesting-permission')
-      permission.requestPermission()
+      if (isRequestingPermission.current) return
+      isRequestingPermission.current = true
+      requestPermission()
+        .catch((e) => onStatusRef.current?.('error', String(e)))
+        .finally(() => {
+          isRequestingPermission.current = false
+        })
     } else {
       onStatusRef.current?.('permission-denied')
     }
-  }, [permission.hasPermission, permission.canRequestPermission, permission, onStatusRef])
+  }, [hasPermission, canRequestPermission, requestPermission, onStatusRef])
 
   const emitPose = useCallback(
     (flat: number[] | null, width: number, height: number, timestamp: number, inferenceMs: number) => {
@@ -139,7 +151,7 @@ export function PoseCamera({
     viewSize.value = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }
   }
 
-  if (!permission.hasPermission) {
+  if (!hasPermission) {
     return <View style={[styles.container, style]} />
   }
 
