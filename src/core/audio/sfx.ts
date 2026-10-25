@@ -18,6 +18,8 @@ const SOURCES = {
   speedUp: require('../../../assets/sfx/speed-up.wav'),
   milestone: require('../../../assets/sfx/milestone.wav'),
   gameOver: require('../../../assets/sfx/game-over.wav'),
+  pop: require('../../../assets/sfx/pop.wav'),
+  golden: require('../../../assets/sfx/golden.wav'),
 } as const
 
 export type SoundName = keyof typeof SOURCES

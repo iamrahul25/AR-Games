@@ -1,10 +1,21 @@
-import { useCallback, useMemo, useState } from 'react'
-import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import {
+  ActivityIndicator,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
 
 import { useSettings } from '@/core/settings/settingsStore'
 import { theme } from '@/core/ui/theme'
 import { useLatest } from '@/core/utils/useLatest'
-import type { FitMode } from './fitTransform'
+import { stageProjection, type FitMode, type StageProjection } from './fitTransform'
 import { GuideOverlay, type GuideSpec } from './GuideOverlay'
 import { PoseSmoother, SMOOTHING_PRESETS, type SmoothingPreset } from './oneEuroFilter'
 import { PoseCamera } from './PoseCamera'
@@ -30,6 +41,8 @@ interface PoseStageProps {
   smoothing?: SmoothingPreset
   /** Lanes / lines / markers drawn above the skeleton. */
   guides?: GuideSpec | null
+  /** Game content drawn above the skeleton, aligned with the camera image. */
+  overlay?: (projection: StageProjection) => ReactNode
   style?: StyleProp<ViewStyle>
 }
 
@@ -47,6 +60,7 @@ export function PoseStage({
   emitIntervalMs,
   smoothing = 'stable',
   guides,
+  overlay,
   style,
 }: PoseStageProps) {
   const { cameraFacing, modelQuality, showSkeleton, demoMode, set } = useSettings()
@@ -78,8 +92,25 @@ export function PoseStage({
     setStatus((prev) => (prev.status === s && prev.message === message ? prev : { status: s, message }))
   }, [])
 
+  const hasOverlay = !!overlay
+  const [size, setSize] = useState({ width: 0, height: 0 })
+  const onLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      if (!hasOverlay) return
+      const { width, height } = e.nativeEvent.layout
+      setSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }))
+    },
+    [hasOverlay],
+  )
+  const stageAspect = demoMode ? SIMULATED_IMAGE_W / SIMULATED_IMAGE_H : imageAspect
+  const mirrorX = !demoMode && cameraFacing === 'back'
+  const projection = useMemo(
+    () => (hasOverlay && size.width > 0 ? stageProjection(stageAspect, size, resizeMode, mirrorX) : null),
+    [hasOverlay, size, stageAspect, resizeMode, mirrorX],
+  )
+
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, style]} onLayout={onLayout}>
       {demoMode ? (
         <SimulatedPoseCamera
           isActive={isActive}
@@ -105,13 +136,11 @@ export function PoseStage({
           emitIntervalMs={emitIntervalMs}
         />
       )}
-      {guides && (
-        <GuideOverlay
-          spec={guides}
-          imageAspect={demoMode ? SIMULATED_IMAGE_W / SIMULATED_IMAGE_H : imageAspect}
-          fit={resizeMode}
-          mirrorX={!demoMode && cameraFacing === 'back'}
-        />
+      {guides && <GuideOverlay spec={guides} imageAspect={stageAspect} fit={resizeMode} mirrorX={mirrorX} />}
+      {overlay && projection && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {overlay(projection)}
+        </View>
       )}
       {!demoMode && status.status !== 'running' && (
         <StatusOverlay

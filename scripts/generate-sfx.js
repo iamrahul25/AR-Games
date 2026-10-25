@@ -137,4 +137,15 @@ writeWav(
   ]),
 )
 writeWav('game-over', sequence([sweep(523, 392, 0.2, { volume: 0.35, type: 'triangle' }), sweep(392, 262, 0.45, { volume: 0.35, type: 'triangle', release: 0.3 })]))
+
+// Bubble Pop
+writeWav('pop', mix(noise(0.05, { volume: 0.35, smooth: 0.3, seed: 5 }), sweep(500, 1400, 0.07, { volume: 0.35, release: 0.03 })))
+writeWav(
+  'golden',
+  sequence([
+    tone(1319, 0.05, { volume: 0.3, type: 'triangle', release: 0.03 }),
+    tone(1760, 0.05, { volume: 0.3, type: 'triangle', release: 0.03 }),
+    tone(2637, 0.16, { volume: 0.3, type: 'triangle', release: 0.12 }),
+  ]),
+)
 console.log(`Sound effects written to ${outDir}`)
